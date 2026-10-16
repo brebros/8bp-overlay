@@ -19,6 +19,7 @@ var st = {
   mode: 'kick', maxRails: 3,
   C: [0.4, 0.9], O: [1.5, 0.5], P: [2.24, 0.0],
   X: [1.12, 0.56],                       // hub: 6 garis dari 6 lubang nembak ke sini
+  A: [1.68, 0.20],                       // handle bidik: garis pantul V (kick/bank)
   sols: [], sel: 0
 };
 var dmDensity = context.getResources().getDisplayMetrics().density;

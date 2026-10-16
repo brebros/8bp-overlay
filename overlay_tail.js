@@ -69,7 +69,7 @@ ui.run(function () {
   var cvx = tableWin.cv;
   cvx.on('touch_down', function (e) {
     var px = e.getX(), py = e.getY(), best = null, bd = 1e9;
-    var ks = ['C', 'O', 'P', 'X'];
+    var ks = ['C', 'O', 'P', 'X', 'A'];
     for (var i = 0; i < ks.length; i++) {
       var d = Math.hypot(sx(st[ks[i]][0]) - px, sy(st[ks[i]][1]) - py);
       if (d < bd) { bd = d; best = ks[i]; }

@@ -22,9 +22,17 @@ di atas layar game. Solver core identik dengan `ball_solver_agent.py`
    - tap baris solusi → jalur + ghost ball kegambar
    - `SHOOT` → swipe gesture otomatis sesuai arah bidik
 
+## Fitur overlay
+- solver multi-rail kick/bank (1–5 rail) + list solusi
+- hub `X` — 6 garis dari 6 lubang, konvergen ke satu lingkaran yang bisa digeser
+- handle `A` — garis pantul V (kick/bank): asal dari cue (KICK) / object (BANK),
+  memantul sampai 3× di cushion, geser A buat ganti arah
+- auto swipe shot (`SHOOT`)
+
 ## Status
 - [x] solver core verified (match Python, semua field)
-- [x] overlay UI + drag + list (ditulis, blm dites di device)
+- [x] V-bounce ray: verifikasi numerik vs simulasi independen (max diff 0.00e+00)
+- [x] overlay UI + drag C/O/P/X/A + list (ditulis, blm dites di device)
 - [x] auto swipe shot (gesture; timing/power blm dikalibrasi)
 - [ ] kalibrasi power swipe per jarak
 - [ ] (opsional) deteksi bola otomatis via warna pixel
