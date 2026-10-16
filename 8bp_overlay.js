@@ -18,6 +18,7 @@ var TW = 2.24, TH = 1.12;               // 9-ft table (m)
 var st = {
   mode: 'kick', maxRails: 3,
   C: [0.4, 0.9], O: [1.5, 0.5], P: [2.24, 0.0],
+  X: [1.12, 0.56],                       // hub: 6 garis dari 6 lubang nembak ke sini
   sols: [], sel: 0
 };
 var dmDensity = context.getResources().getDisplayMetrics().density;
@@ -290,6 +291,31 @@ function renderFrame(canvas) {
         paint.setColor(colors.parseColor('#000000'));
       }
     }
+    // hub: 6 garis dari 6 lubang -> X (bisa digeser di layar game)
+    var hubR = Math.max(dp(9), scl * 0.055), Xp = st.X;
+    paint.setColor(colors.parseColor('#CC58A6FF'));
+    paint.setStyle(android.graphics.Paint.Style.STROKE);
+    paint.setStrokeWidth(dp(1.5));
+    for (var q = 0; q < pp.length; q++) {
+      var rx = Xp[0] - pp[q][0], ry = Xp[1] - pp[q][1];
+      var rl = Math.hypot(rx, ry) || 1;
+      canvas.drawLine(sx(pp[q][0]), sy(pp[q][1]),
+        sx(Xp[0] - rx / rl * (hubR / scl)), sy(Xp[1] - ry / rl * (hubR / scl)), paint);
+    }
+    paint.setStyle(android.graphics.Paint.Style.FILL);
+    paint.setColor(colors.parseColor('#3358A6FF'));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
+    paint.setStyle(android.graphics.Paint.Style.STROKE);
+    paint.setStrokeWidth(dp(2));
+    paint.setColor(colors.parseColor('#FF58A6FF'));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
+    paint.setStyle(android.graphics.Paint.Style.FILL);
+    paint.setColor(colors.parseColor('#FF58A6FF'));
+    paint.setTextSize(dp(10));
+    paint.setTextAlign(android.graphics.Paint.Align.CENTER);
+    var ascX = paint.ascent();
+    canvas.drawText('X', sx(Xp[0]), sy(Xp[1]) - (ascX + paint.descent()) / 2, paint);
+
     // path
     var s = st.sols.length ? st.sols[st.sel] : null;
     if (s && s.pts && s.pts.length > 1) {
@@ -402,8 +428,8 @@ ui.run(function () {
   var cvx = tableWin.cv;
   cvx.on('touch_down', function (e) {
     var px = e.getX(), py = e.getY(), best = null, bd = 1e9;
-    var ks = ['C', 'O', 'P'];
-    for (var i = 0; i < 3; i++) {
+    var ks = ['C', 'O', 'P', 'X'];
+    for (var i = 0; i < ks.length; i++) {
       var d = Math.hypot(sx(st[ks[i]][0]) - px, sy(st[ks[i]][1]) - py);
       if (d < bd) { bd = d; best = ks[i]; }
     }

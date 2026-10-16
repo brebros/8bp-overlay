@@ -63,6 +63,31 @@ function renderFrame(canvas) {
         paint.setColor(colors.parseColor('#000000'));
       }
     }
+    // hub: 6 garis dari 6 lubang -> X (bisa digeser di layar game)
+    var hubR = Math.max(dp(9), scl * 0.055), Xp = st.X;
+    paint.setColor(colors.parseColor('#CC58A6FF'));
+    paint.setStyle(android.graphics.Paint.Style.STROKE);
+    paint.setStrokeWidth(dp(1.5));
+    for (var q = 0; q < pp.length; q++) {
+      var rx = Xp[0] - pp[q][0], ry = Xp[1] - pp[q][1];
+      var rl = Math.hypot(rx, ry) || 1;
+      canvas.drawLine(sx(pp[q][0]), sy(pp[q][1]),
+        sx(Xp[0] - rx / rl * (hubR / scl)), sy(Xp[1] - ry / rl * (hubR / scl)), paint);
+    }
+    paint.setStyle(android.graphics.Paint.Style.FILL);
+    paint.setColor(colors.parseColor('#3358A6FF'));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
+    paint.setStyle(android.graphics.Paint.Style.STROKE);
+    paint.setStrokeWidth(dp(2));
+    paint.setColor(colors.parseColor('#FF58A6FF'));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
+    paint.setStyle(android.graphics.Paint.Style.FILL);
+    paint.setColor(colors.parseColor('#FF58A6FF'));
+    paint.setTextSize(dp(10));
+    paint.setTextAlign(android.graphics.Paint.Align.CENTER);
+    var ascX = paint.ascent();
+    canvas.drawText('X', sx(Xp[0]), sy(Xp[1]) - (ascX + paint.descent()) / 2, paint);
+
     // path
     var s = st.sols.length ? st.sols[st.sel] : null;
     if (s && s.pts && s.pts.length > 1) {

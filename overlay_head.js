@@ -18,6 +18,7 @@ var TW = 2.24, TH = 1.12;               // 9-ft table (m)
 var st = {
   mode: 'kick', maxRails: 3,
   C: [0.4, 0.9], O: [1.5, 0.5], P: [2.24, 0.0],
+  X: [1.12, 0.56],                       // hub: 6 garis dari 6 lubang nembak ke sini
   sols: [], sel: 0
 };
 var dmDensity = context.getResources().getDisplayMetrics().density;
