@@ -88,4 +88,4 @@ ui.run(function () {
 
 bMode.setText('mode: KICK');
 solveAll();
-toast('8bp overlay aktif — tarik 3 bola, tap solusi, SHOOT');
+toast('8bp overlay aktif (v3) — tarik 3 bola, tap solusi, SHOOT');

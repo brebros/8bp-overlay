@@ -4,11 +4,9 @@ var android={graphics:{Paint:{Style:{STROKE:'S',FILL:'F'},Align:{CENTER:'C'}}}};
 function sx(x){return x*scl;} function sy(y){return y*scl;}
 var st={mode:'kick',C:[0.9,0.25],O:[1.6,0.95],A:[0.3,1.05],X:[1.12,0.56]};
 var lines=[];
-var paint={setStyle:function(){},setStrokeWidth:function(){},setColor:function(){},setTextSize:function(){},
-  setTextAlign:function(){},ascent:function(){return -5;},descent:function(){return 5;}};
+var paint={setStyle:function(){},setStrokeWidth:function(){},setColor:function(){},setTextSize:function(){},setTextAlign:function(){},ascent:function(){return -5;},descent:function(){return 5;}};
 var colors={parseColor:function(s){return s;}};
-var canvas={drawLine:function(a,b,c,d){lines.push([[+(a/scl).toFixed(6),+(b/scl).toFixed(6)],[+(c/scl).toFixed(6),+(d/scl).toFixed(6)]]);},
-  drawCircle:function(){}, drawText:function(){}};
+var canvas={drawLine:function(a,b,c,dd){lines.push([[+(a/scl).toFixed(6),+(b/scl).toFixed(6)],[+(c/scl).toFixed(6),+(dd/scl).toFixed(6)]]);},drawCircle:function(){},drawText:function(){}};
 // garis pantul V (kick/bank): origin (C di KICK / O di BANK) -> handle A
     var org = (st.mode === 'bank') ? st.O : st.C, Av = st.A;
     var dvx = Av[0] - org[0], dvy = Av[1] - org[1], dl = Math.hypot(dvx, dvy);

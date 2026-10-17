@@ -11,8 +11,8 @@
  * lain" + Aksesibilitas -> tarik 3 bola di panel tabel -> tap solusi -> SHOOT.
  */
 // ====================== PART 1 : state, geometri, deteksi tepi ======================
-auto.waitFor();
-requestScreenCapture(false);
+auto.waitFor();          // butuh Accessibility service aktif
+// catatan: script ini TIDAK pakai screenshot, jadi tidak minta izin screen capture
 
 var TW = 2.24, TH = 1.12;               // 9-ft table (m)
 var st = {
@@ -489,4 +489,4 @@ ui.run(function () {
 
 bMode.setText('mode: KICK');
 solveAll();
-toast('8bp overlay aktif — tarik 3 bola, tap solusi, SHOOT');
+toast('8bp overlay aktif (v3) — tarik 3 bola, tap solusi, SHOOT');
