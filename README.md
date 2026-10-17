@@ -8,7 +8,8 @@ di atas layar game. Solver core identik dengan `ball_solver_agent.py`
 - `8bp_overlay.js` — script utama, jalan di **AutoJs6** (runtime Auto.js modern,
   open source: github.com/kkevsekk1/AutoX)
 - `solver_core.js` — solver geometry murni (JS, node --check OK)
-- `overlay_head.js` / `ui_part.js` / `overlay_tail.js` — bagian-bagian 8bp_overlay.js
+- `overlay_head.js` / `render.js` / `controls.js` — bagian-bagian 8bp_overlay.js
+  (layout pakai XML string, bukan JSX — sesuai doc AutoJs6)
 - `ball_solver_agent.py` — versi Python asli (spec/API reference)
 - versi web: https://brebros.github.io/ball-solver/
 
@@ -28,6 +29,14 @@ di atas layar game. Solver core identik dengan `ball_solver_agent.py`
 - handle `A` — garis pantul V (kick/bank): asal dari cue (KICK) / object (BANK),
   memantul sampai 3× di cushion, geser A buat ganti arah
 - auto swipe shot (`SHOOT`)
+
+## Catatan teknis (AutoJs6)
+- Layout floaty = **XML string** (`floaty.rawWindow('<vertical>...')`), atribut dinamis pakai `{{expr}}`.
+- List: `setDataSource(array)` + template `{{tag}}`, event `item_click`.
+- Canvas: `<canvas>` + `on('draw', cb)`, `setMaxFps(15)`; body draw dibungkus try/catch
+  karena exception di handler draw mematikan script.
+- Drag: `on('touch_down'|'touch_move'|'touch_up')` di view canvas.
+- Shot: `swipe(x1,y1,x2,y2,dur)` (butuh Accessibility service).
 
 ## Status
 - [x] solver core verified (match Python, semua field)

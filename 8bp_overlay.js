@@ -1,75 +1,88 @@
 /*
- * 8bp_overlay.js — floating aim-assist overlay untuk 8 Ball Pool (Android)
+ * 8bp_overlay.js — overlay aim-assist buat 8 Ball Pool (Android / AutoJs6)
  *
- * Runtime : AutoJs6 (F-Droid / github.com/kkevsekk1/AutoX)
- * Fitur   : floaty window di atas game, drag 3 titik (C/O/P), solver multi-rail
- *           (kick/bank, sampai 5 rail), gambar jalur + ghost ball, auto swipe shot.
- * Status  : WIP — solver core VERIFIED (15 kick / 11 sol, exact match dgn versi
- *           Python), UI + gesture di bawah blm dites di device.
- *
- * Cara pakai: import di AutoJs6 -> jalankan -> izinkan "Tampil di atas aplikasi
- * lain" + Aksesibilitas -> tarik 3 bola di panel tabel -> tap solusi -> SHOOT.
+ * Runtime : AutoJs6 (docs.autojs6.com). Layout pakai XML STRING — BUKAN JSX.
+ * Fitur   : panel floaty di atas game: drag C/O/P + hub X + handle A (garis pantul V),
+ *           solver multi-rail kick/bank, list solusi, auto swipe SHOOT.
+ * Izin    : "Tampil di atas aplikasi lain" + Aksesibilitas (buat swipe).
+ * API     : floaty.rawWindow(xml) / view.on('touch_down'|'touch_move'|'touch_up') /
+ *           list.setDataSource(array) + {{binding}} / canvas.on('draw') / swipe().
+ * Status  : solver core VERIFIED; UI layer ikut doc resmi, belum diuji di device.
  */
-// ====================== PART 1 : state, geometri, deteksi tepi ======================
-auto.waitFor();          // butuh Accessibility service aktif
-// catatan: script ini TIDAK pakai screenshot, jadi tidak minta izin screen capture
-
-var TW = 2.24, TH = 1.12;               // 9-ft table (m)
+// ===================== state & geometri =====================
+var TW = 2.24, TH = 1.12;                  // meja 9-ft (x/y satuan sama)
 var st = {
   mode: 'kick', maxRails: 3,
-  C: [0.4, 0.9], O: [1.5, 0.5], P: [1.12, 1.12],
-  X: [1.12, 0.56],                       // hub: 6 garis dari 6 lubang nembak ke sini
-  A: [1.68, 0.20],                       // handle bidik: garis pantul V (kick/bank)
+  C: [0.40, 0.90], O: [1.50, 0.50], P: [1.12, 1.12],
+  X: [1.12, 0.56], A: [1.68, 0.20],
   sols: [], sel: 0
 };
 var dmDensity = context.getResources().getDisplayMetrics().density;
+function dp(v) { return Math.round(v * dmDensity); }
 var sw = device.width, sh = device.height;
-var tableWin = floaty.rawWindow(
-  <frame w={Math.round(sw * 0.62)} h={Math.round(sw * 0.62 * TH / TW) + 30} bg="#66000000">
-    <vertical><canvas id="cv" w="*" h="*"/></vertical>
-  </frame>);
-tableWin.setPosition(sw - Math.round(sw * 0.62) - 8, Math.round(sh * 0.30));
-tableWin.setTouchable(true);
-
-var PAD = 12, oX = PAD, oY = PAD;
-var cssW = Math.round(sw * 0.62) - 2 * PAD;
-var scl = cssW / TW;                    // px per meter
-var ballPx = Math.max(9, scl * 0.0286 * 1.6);
+var PAD = 6;
+var panelW = Math.round(sw * 0.62);
+var clothW = panelW - 2 * PAD;
+var clothH = Math.round(clothW * TH / TW);
+var oX = PAD, oY = PAD, scl = clothW / TW;
+var ballPx = Math.max(8, scl * 0.0286 * 1.6);
 
 function sx(x) { return oX + x * scl; }
 function sy(y) { return oY + (TH - y) * scl; }
 function ux(px) { return Math.min(TW, Math.max(0, (px - oX) / scl)); }
 function uy(py) { return Math.min(TH, Math.max(0, TH - (py - oY) / scl)); }
 function ballRad() { return ballPx; }
+function clampP(px, py) { return [ux(px), uy(py)]; }
 function pocketList() {
   // 4 sudut + 2 tengah di rail PANJANG (sisi horizontal)
   return [[0, 0], [TW, 0], [0, TH], [TW, TH], [TW / 2, 0], [TW / 2, TH]];
 }
-function dist(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
-function clampP(x, y) { return [ux(x), uy(y)]; }
-
-// ====================== gesture swipe (auto shot) ======================
-function swipeShot(x0, y0, x1, y1, dur, steps) {
-  var pts = [], dx = (x1 - x0) / steps, dy = (y1 - y0) / steps;
-  for (var i = 0; i <= steps; i++) {
-    pts.push([Math.round(x0 + dx * i), Math.round(y0 + dy * i)]);
-    pts.push(Math.max(5, Math.round(dur / steps)));
-  }
-  gesture.apply(null, pts);
+function C(hex) {                          // string warna -> int
+  try { return colors.parseColor(hex); }
+  catch (e) { return android.graphics.Color.parseColor(hex); }
 }
 
+// ===================== panel floaty (XML string, tanpa JSX) =====================
+var layout =
+  '<vertical bg="#66000000" padding="4">' +
+    '<canvas id="cv" w="' + clothW + '" h="' + clothH + '"/>' +
+    '<horizontal>' +
+      '<button id="bMode"  w="66" h="46" text="KICK"    textSize="10sp"/>' +
+      '<button id="bRails" w="72" h="46" text="rails 3" textSize="10sp"/>' +
+      '<button id="bShoot" w="78" h="46" text="SHOOT"   textSize="10sp"/>' +
+      '<button id="bExit"  w="60" h="46" text="EXIT"    textSize="10sp"/>' +
+    '</horizontal>' +
+    '<text id="lbl" text="KICK | 0 sol" textSize="10sp" textColor="#FFD166" bg="#44000000"/>' +
+    '<list id="lv" w="' + clothW + '" h="150">' +
+      '<vertical padding="3" bg="{{bg}}">' +
+        '<horizontal>' +
+          '<text w="72" text="{{tag}}" textSize="11sp" textColor="#58A6FF"/>' +
+          '<text w="*"  text="{{m1}}"  textSize="9sp"  textColor="#DDDDDD"/>' +
+        '</horizontal>' +
+        '<text text="{{m2}}" textSize="9sp" textColor="#888888"/>' +
+      '</vertical>' +
+    '</list>' +
+  '</vertical>';
+
+var win = floaty.rawWindow(layout);
+win.setPosition(8, Math.round(sh * 0.20));
+
+// ===================== auto shot (swipe) =====================
 function shootSelected() {
   var s = st.sols.length ? st.sols[st.sel] : null;
-  if (!s) { toast('ga ada solusi dipilih'); return; }
-  // arah bidik = ruas terakhir (cue -> ghost/contact)
+  if (!s) { toast('belum ada solusi dipilih'); return; }
+  if (!auto.service) { toast('Aksesibilitas belum aktif — SHOOT ga bisa'); return; }
+  // arah bidik = ruas terakhir jalur (cue -> titik kontak)
   var a = s.pts[s.pts.length - 2], b = s.pts[s.pts.length - 1];
-  var ax = sx(a[0]), ay = sy(a[1]), bx = sx(b[0]), by = sy(b[1]);
+  var wx = win.getX() + 4, wy = win.getY() + 4;      // offset canvas di layar
+  var ax = wx + sx(a[0]), ay = wy + sy(a[1]);
+  var bx = wx + sx(b[0]), by = wy + sy(b[1]);
   var L = Math.hypot(bx - ax, by - ay) || 1;
   var vx = (bx - ax) / L, vy = (by - ay) / L;
-  // start swipe agak mundur dari cue ball, panjang = jarak cue->contact
-  var sxp = ax - vx * L * 0.9, syp = ay - vy * L * 0.9;
-  toast('SWIPE shot (' + (s.rails.length ? s.rails.join('->') : 'direct') + ')');
-  setTimeout(function () { swipeShot(sxp, syp, ax, ay, 380, 12); }, 250);
+  var x0 = Math.round(ax - vx * L * 0.6), y0 = Math.round(ay - vy * L * 0.6);
+  var x1 = Math.round(ax + vx * L * 0.4), y1 = Math.round(ay + vy * L * 0.4);
+  toast('SWIPE: ' + (s.rails.length ? s.rails.join('->') : 'direct'));
+  threads.start(function () { sleep(400); swipe(x0, y0, x1, y1, 220); });
 }
 
 //=== CORE BEGIN ===
@@ -228,105 +241,76 @@ if (typeof module !== 'undefined' && module.exports) {
   module.exports = { solveKick: solveKick, solveBank: solveBank, selfTest: selfTest, build: build, verify: verify };
 }
 
-// ============================ PART 2 : UI (tiles, panels, list) ============================
-var SOL_COLOR = '#FFD166', TEXT_W = '#FFFFFF', TEXT_DIM = '#BBBBBB';
-
-function dp(v) { return Math.round(v * dmDensity); }
-
-function mkTile(x, y, txt, fg, bg) {
-  var t = floaty.rawWindow(<frame w="64" h="64" gravity="center"><text id="t" text={txt} textSize="11sp" textColor={fg} gravity="center" bg={bg}/></frame>);
-  t.setPosition(x, y);
-  return t;
-}
-
-function mkText(x, y, w, h, txt, size, bg, id) {
-  var t = floaty.rawWindow(<frame w={w} h={h} gravity="center"><text id={id || "t"} text={txt} textSize={size + "sp"} textColor={TEXT_W} gravity="center" bg={bg}/></frame>);
-  t.setPosition(x, y);
-  return t;
-}
-
-function mkList(x, y, w) {
-  var lf = floaty.rawWindow(<frame w={w} h={dp(210)} bg="#99000000"><vertical padding="4">
-      <text id="hdr" text="—" textSize="10sp" textColor="#FFD166" gravity="center"/>
-      <list id="lv" w="*" h={dp(180)}>
-        <horizontal bg={sel ? "#331F6FEB" : "#00000000"} padding="4 3">
-          <text w="70" text={tag} textSize="11sp" textColor="#58A6FF" textStyle="bold"/>
-          <text w="*" text={m1 + "\n" + m2} textSize="9sp" textColor="#DDDDDD"/>
-        </horizontal>
-      </list>
-    </vertical></frame>);
-  lf.setPosition(x, y);
-  return lf;
-}
-
-function drawTable() {
-  ui.run(function () {
-    tableWin.layout.removeAllViews();
-    var cv = <canvas id="cv" w="*" h="*"/>;
-    tableWin.layout.addView(cv);
-    cv.on('draw', function (canvas) { renderFrame(canvas); });
-  });
-}
+// ===================== layer gambar (canvas 'draw') =====================
+// Paint global disediakan AutoJs6. Semua digambar per-frame; exception DI DALAM
+// handler 'draw' bisa mematikan script, jadi seluruh body dibungkus try/catch.
+var pk = {
+  fill: new Paint(Paint.ANTI_ALIAS_FLAG),
+  stroke: new Paint(Paint.ANTI_ALIAS_FLAG)
+};
+var lastDrawError = '';
 
 function renderFrame(canvas) {
-  if (!canvas) return;
-  canvas.drawColor(colors.parseColor('#00000000'), android.graphics.PorterDuff.Mode.CLEAR);
-  var frame = canvas.save();
   try {
-    var paint = new android.graphics.Paint();
-    paint.setAntiAlias(true);
-    // cloth
-    paint.setColor(colors.parseColor('#14663A'));
-    canvas.drawRect(sx(0) - dp(4), sy(0) - dp(4), sx(TW) + dp(4), sy(TH) + dp(4), paint);
-    // pockets
-    paint.setColor(colors.parseColor('#000000'));
-    var pp = pocketList();
+    pk.fill.setStyle(Paint.Style.FILL);
+    pk.stroke.setStyle(Paint.Style.STROKE);
+    pk.stroke.setAntiAlias(true);
+    pk.fill.setAntiAlias(true);
+
+    // meja + cushion
+    canvas.drawColor(C('#0D1117'));
+    pk.fill.setColor(C('#2B1A0E'));
+    canvas.drawRect(oX - PAD, oY - PAD, oX + TW * scl + PAD, oY + TH * scl + PAD, pk.fill);
+    pk.fill.setColor(C('#14663A'));
+    canvas.drawRect(oX, oY, oX + TW * scl, oY + TH * scl, pk.fill);
+
+    // label rail
+    pk.fill.setColor(C('#66FFFFFF'));
+    pk.fill.setTextSize(dp(9));
+    pk.fill.setTextAlign(Paint.Align.CENTER);
+    canvas.drawText('L', sx(0) - dp(3), sy(TH / 2), pk.fill);
+    canvas.drawText('R', sx(TW) + dp(3), sy(TH / 2), pk.fill);
+    canvas.drawText('B', sx(TW / 2), sy(0) + dp(11), pk.fill);
+    canvas.drawText('T', sx(TW / 2), sy(TH) - dp(4), pk.fill);
+
+    // lubang + highlight target
+    var pp = pocketList(), rad = Math.max(dp(4), scl * 0.07);
     for (var i = 0; i < pp.length; i++) {
-      var rad = Math.max(dp(4), scl * 0.07);
-      canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, paint);
+      pk.fill.setColor(C('#000000'));
+      canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, pk.fill);
       if (Math.hypot(pp[i][0] - st.P[0], pp[i][1] - st.P[1]) < 0.07) {
-        paint.setStyle(android.graphics.Paint.Style.STROKE);
-        paint.setStrokeWidth(dp(2));
-        paint.setColor(colors.parseColor('#3FB950'));
-        canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, paint);
-        paint.setStyle(android.graphics.Paint.Style.FILL);
-        paint.setColor(colors.parseColor('#000000'));
+        pk.stroke.setColor(C('#3FB950'));
+        pk.stroke.setStrokeWidth(dp(2));
+        canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, pk.stroke);
       }
     }
-    // hub: 6 garis dari 6 lubang -> X (bisa digeser di layar game)
-    var hubR = Math.max(dp(9), scl * 0.055), Xp = st.X;
-    paint.setColor(colors.parseColor('#CC58A6FF'));
-    paint.setStyle(android.graphics.Paint.Style.STROKE);
-    paint.setStrokeWidth(dp(1.5));
-    for (var q = 0; q < pp.length; q++) {
-      var rx = Xp[0] - pp[q][0], ry = Xp[1] - pp[q][1];
-      var rl = Math.hypot(rx, ry) || 1;
-      canvas.drawLine(sx(pp[q][0]), sy(pp[q][1]),
-        sx(Xp[0] - rx / rl * (hubR / scl)), sy(Xp[1] - ry / rl * (hubR / scl)), paint);
-    }
-    paint.setStyle(android.graphics.Paint.Style.FILL);
-    paint.setColor(colors.parseColor('#3358A6FF'));
-    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
-    paint.setStyle(android.graphics.Paint.Style.STROKE);
-    paint.setStrokeWidth(dp(2));
-    paint.setColor(colors.parseColor('#FF58A6FF'));
-    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, paint);
-    paint.setStyle(android.graphics.Paint.Style.FILL);
-    paint.setColor(colors.parseColor('#FF58A6FF'));
-    paint.setTextSize(dp(10));
-    paint.setTextAlign(android.graphics.Paint.Align.CENTER);
-    var ascX = paint.ascent();
-    canvas.drawText('X', sx(Xp[0]), sy(Xp[1]) - (ascX + paint.descent()) / 2, paint);
 
-    // garis pantul V (kick/bank): origin (C di KICK / O di BANK) -> handle A
+    // hub X: 6 garis dari 6 lubang
+    var hubR = Math.max(dp(9), scl * 0.055), Xp = st.X;
+    pk.stroke.setColor(C('#CC58A6FF'));
+    pk.stroke.setStrokeWidth(dp(1.5));
+    for (var q = 0; q < pp.length; q++) {
+      var rx = Xp[0] - pp[q][0], ry = Xp[1] - pp[q][1], rl = Math.hypot(rx, ry) || 1;
+      canvas.drawLine(sx(pp[q][0]), sy(pp[q][1]),
+        sx(Xp[0] - rx / rl * (hubR / scl)), sy(Xp[1] - ry / rl * (hubR / scl)), pk.stroke);
+    }
+    pk.fill.setColor(C('#3358A6FF'));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, pk.fill);
+    pk.stroke.setColor(C('#FF58A6FF'));
+    pk.stroke.setStrokeWidth(dp(2));
+    canvas.drawCircle(sx(Xp[0]), sy(Xp[1]), hubR, pk.stroke);
+    pk.fill.setColor(C('#FF58A6FF'));
+    pk.fill.setTextSize(dp(10));
+    canvas.drawText('X', sx(Xp[0]), sy(Xp[1]) + dp(3), pk.fill);
+
+    // garis pantul V: origin (C kalau KICK / O kalau BANK) -> handle A
     var org = (st.mode === 'bank') ? st.O : st.C, Av = st.A;
     var dvx = Av[0] - org[0], dvy = Av[1] - org[1], dl = Math.hypot(dvx, dvy);
     if (dl > 1e-6) {
       dvx /= dl; dvy /= dl;
       var pv = [org[0], org[1]];
-      paint.setStyle(android.graphics.Paint.Style.STROKE);
-      paint.setStrokeWidth(dp(2));
-      paint.setColor(colors.parseColor('#FFFF7B72'));
+      pk.stroke.setColor(C('#FFFF7B72'));
+      pk.stroke.setStrokeWidth(dp(2));
       for (var b = 0; b < 3; b++) {
         var bt = Infinity, rail = null, t;
         if (dvx < 0) { t = (0 - pv[0]) / dvx; if (t > 1e-9 && t < bt) { bt = t; rail = 'L'; } }
@@ -334,159 +318,138 @@ function renderFrame(canvas) {
         if (dvy < 0) { t = (0 - pv[1]) / dvy; if (t > 1e-9 && t < bt) { bt = t; rail = 'B'; } }
         if (dvy > 0) { t = (TH - pv[1]) / dvy; if (t > 1e-9 && t < bt) { bt = t; rail = 'T'; } }
         if (!rail || !isFinite(bt)) break;
-        var hx = Math.min(TW, Math.max(0, pv[0] + dvx * bt)), hy = Math.min(TH, Math.max(0, pv[1] + dvy * bt));
-        canvas.drawLine(sx(pv[0]), sy(pv[1]), sx(hx), sy(hy), paint);
+        var hx = Math.min(TW, Math.max(0, pv[0] + dvx * bt));
+        var hy = Math.min(TH, Math.max(0, pv[1] + dvy * bt));
+        canvas.drawLine(sx(pv[0]), sy(pv[1]), sx(hx), sy(hy), pk.stroke);
         if (rail === 'L' || rail === 'R') dvx = -dvx; else dvy = -dvy;
         pv = [hx, hy];
-        paint.setStyle(android.graphics.Paint.Style.FILL);
-        canvas.drawCircle(sx(hx), sy(hy), dp(3.5), paint);
-        paint.setStyle(android.graphics.Paint.Style.STROKE);
+        pk.fill.setColor(C('#FFFF7B72'));
+        canvas.drawCircle(sx(hx), sy(hy), dp(3.5), pk.fill);
       }
     }
     var aR = Math.max(dp(8), scl * 0.045);
-    paint.setStyle(android.graphics.Paint.Style.FILL);
-    paint.setColor(colors.parseColor('#33FF7B72'));
-    canvas.drawCircle(sx(Av[0]), sy(Av[1]), aR, paint);
-    paint.setStyle(android.graphics.Paint.Style.STROKE);
-    paint.setStrokeWidth(dp(2));
-    paint.setColor(colors.parseColor('#FFFF7B72'));
-    canvas.drawCircle(sx(Av[0]), sy(Av[1]), aR, paint);
-    paint.setStyle(android.graphics.Paint.Style.FILL);
-    paint.setColor(colors.parseColor('#FFFF7B72'));
-    paint.setTextSize(dp(10));
-    paint.setTextAlign(android.graphics.Paint.Align.CENTER);
-    var ascA = paint.ascent();
-    canvas.drawText('A', sx(Av[0]), sy(Av[1]) - (ascA + paint.descent()) / 2, paint);
+    pk.fill.setColor(C('#33FF7B72'));
+    canvas.drawCircle(sx(Av[0]), sy(Av[1]), aR, pk.fill);
+    pk.stroke.setColor(C('#FFFF7B72'));
+    pk.stroke.setStrokeWidth(dp(2));
+    canvas.drawCircle(sx(Av[0]), sy(Av[1]), aR, pk.stroke);
+    pk.fill.setColor(C('#FFFF7B72'));
+    pk.fill.setTextSize(dp(10));
+    pk.fill.setTextAlign(Paint.Align.CENTER);
+    canvas.drawText('A', sx(Av[0]), sy(Av[1]) + dp(3), pk.fill);
 
-    // path
+    // jalur solusi terpilih
     var s = st.sols.length ? st.sols[st.sel] : null;
     if (s && s.pts && s.pts.length > 1) {
       if (s.ghost) {
-        paint.setColor(colors.parseColor('#88FFFFFF'));
-        canvas.drawCircle(sx(s.ghost[0]), sy(s.ghost[1]), ballRad() * 0.9, paint);
+        pk.fill.setColor(C('#88FFFFFF'));
+        canvas.drawCircle(sx(s.ghost[0]), sy(s.ghost[1]), ballRad() * 0.9, pk.fill);
       }
-      paint.setColor(colors.parseColor(SOL_COLOR));
-      paint.setStyle(android.graphics.Paint.Style.STROKE);
-      paint.setStrokeWidth(dp(2.5));
-      var pth = new android.graphics.Path();
-      pth.moveTo(sx(s.pts[0][0]), sy(s.pts[0][1]));
-      for (var j = 1; j < s.pts.length; j++) pth.lineTo(sx(s.pts[j][0]), sy(s.pts[j][1]));
-      canvas.drawPath(pth, paint);
-      for (var k = 1; k <= s.rails.length; k++) {
-        paint.setStyle(android.graphics.Paint.Style.FILL);
-        canvas.drawCircle(sx(s.pts[k][0]), sy(s.pts[k][1]), dp(3.5), paint);
-        paint.setStyle(android.graphics.Paint.Style.STROKE);
-      }
-      paint.setStyle(android.graphics.Paint.Style.FILL);
+      pk.stroke.setColor(C('#FFD166'));
+      pk.stroke.setStrokeWidth(dp(2.5));
+      var path = new android.graphics.Path();
+      path.moveTo(sx(s.pts[0][0]), sy(s.pts[0][1]));
+      for (var j = 1; j < s.pts.length; j++) path.lineTo(sx(s.pts[j][0]), sy(s.pts[j][1]));
+      canvas.drawPath(path, pk.stroke);
+      pk.fill.setColor(C('#FFD166'));
+      for (var k = 1; k <= s.rails.length; k++) canvas.drawCircle(sx(s.pts[k][0]), sy(s.pts[k][1]), dp(3.5), pk.fill);
     }
-    // balls
-    var cols = { C: '#F2F2F2', O: '#FFB02E', P: '#3FB950' }, keys = ['C', 'O', 'P'];
-    paint.setStyle(android.graphics.Paint.Style.FILL);
-    for (var b = 0; b < keys.length; b++) {
-      var kk = keys[b], pt = st[kk];
-      paint.setColor(colors.parseColor(cols[kk]));
-      canvas.drawCircle(sx(pt[0]), sy(pt[1]), ballRad(), paint);
-      paint.setColor(colors.parseColor('#0D1117'));
-      paint.setTextSize(dp(9));
-      paint.setTextAlign(android.graphics.Paint.Align.CENTER);
-      var asc = paint.ascent();
-      canvas.drawText(kk, sx(pt[0]), sy(pt[1]) - (asc + paint.descent()) / 2, paint);
+
+    // bola C/O/P
+    var keys = ['C', 'O', 'P'], cols = { C: '#F2F2F2', O: '#FFB02E', P: '#3FB950' };
+    pk.fill.setTextSize(dp(9));
+    for (var m = 0; m < keys.length; m++) {
+      var kk = keys[m], pt = st[kk];
+      pk.fill.setColor(C(cols[kk]));
+      canvas.drawCircle(sx(pt[0]), sy(pt[1]), ballRad(), pk.fill);
+      pk.fill.setColor(C('#0D1117'));
+      canvas.drawText(kk, sx(pt[0]), sy(pt[1]) + dp(3), pk.fill);
     }
-  } finally {
-    canvas.restoreToCount(frame);
+
+    if (lastDrawError) {
+      pk.fill.setColor(C('#FFFF5555'));
+      pk.fill.setTextSize(dp(10));
+      canvas.drawText('draw err: ' + lastDrawError.substr(0, 40), clothW / 2, clothH - dp(6), pk.fill);
+    }
+  } catch (e) {
+    lastDrawError = String(e && e.message ? e.message : e);   // jangan biarkan exception mematikan script
   }
 }
 
-function refresh() { ui.run(function () { tableWin.requestLayout(); tableWin.invalidate(); }); }
-
-// ====================== PART 3 : kontrol, drag, list, init ======================
-if (typeof dp !== 'function') function dp(v) { return Math.round(v * dmDensity); }
-
-var barX = 8, barY = tableWin.getY() + tableWin.getHeight() + 6;
-var bMode = mkTile(barX, barY, 'KICK', '#FFFFFF', '#1F6FEB');
-var bRails = mkTile(barX + 68, barY, 'rails 3', '#FFFFFF', '#444444');
-var bShoot = mkTile(barX + 136, barY, 'SHOOT', '#FFFFFF', '#B8860B');
-var bExit = mkTile(barX + 204, barY, 'EXIT', '#FFFFFF', '#8B2222');
-var listW = Math.min(sw - 20, 300);
-var listWin = mkList(sw - listW - 8, Math.round(sh * 0.62), listW);
-listWin.setTouchable(true);
-
-var items = [];
-function pushItems() {
-  items = [];
-  for (var i = 0; i < st.sols.length; i++) {
-    var s = st.sols[i];
-    items.push({
-      tag: s.rails.length ? s.rails.join(' > ') : 'direct',
-      m1: 'aim ' + s.aim.toFixed(1) + ' | cut ' + s.cut.toFixed(1),
-      m2: 'len ' + s.len.toFixed(2) + ' | score ' + s.score.toFixed(1),
-      sel: i === st.sel
-    });
-  }
-  ui.run(function () { listWin.lv.setData(items); });
-}
+// ===================== kontrol, drag, list, init =====================
+function evX(e) { try { return e.getX(); } catch (err) { return e.x || 0; } }
+function evY(e) { try { return e.getY(); } catch (err) { return e.y || 0; } }
 
 function solveAll() {
   st.sols = (st.mode === 'kick')
     ? solveKick(st.C, st.O, st.P, TW, TH, st.maxRails)
     : solveBank(st.O, st.P, st.C, TW, TH, st.maxRails);
-  st.sel = 0;
+  if (st.sel >= st.sols.length) st.sel = 0;
   pushItems();
-  ui.run(function () {
-    listWin.hdr.text = (st.mode === 'kick' ? 'KICK' : 'BANK') + ' | ' +
-      st.sols.length + ' sol | #' + (st.sols.length ? st.sel + 1 : 0);
-  });
-  refresh();
 }
 
-bMode.click(function () {
-  st.mode = st.mode === 'kick' ? 'bank' : 'kick';
-  bMode.setText('mode: ' + st.mode.toUpperCase());
-  solveAll();
-});
-bRails.click(function () {
-  st.maxRails = st.maxRails >= 5 ? 1 : st.maxRails + 1;
-  bRails.setText('rails ' + st.maxRails);
-  solveAll();
-});
-bShoot.click(function () { shootSelected(); });
-bExit.click(function () {
-  engines.stopAll();
-});
-
-listWin.lv.on('item_click', function (item, i) {
-  st.sel = i;
-  pushItems();
+function pushItems() {
+  var items = [], i, s;
+  for (i = 0; i < st.sols.length; i++) {
+    s = st.sols[i];
+    items.push({
+      tag: s.rails.length ? s.rails.join(' > ') : 'direct',
+      m1: 'aim ' + s.aim.toFixed(1) + '  cut ' + s.cut.toFixed(1),
+      m2: 'len ' + s.len.toFixed(2) + '  score ' + s.score.toFixed(1),
+      bg: (i === st.sel) ? '#331F6FEB' : '#00000000'
+    });
+  }
   ui.run(function () {
-    listWin.hdr.text = st.mode.toUpperCase() + ' | ' + st.sols.length + ' sol | #' + (i + 1);
+    try { win.lv.setDataSource(items); } catch (e) { lastDrawError = 'list: ' + e; }
+    try { win.lbl.text((st.mode === 'kick' ? 'KICK' : 'BANK') + ' | ' + st.sols.length + ' sol | #' + (st.sols.length ? st.sel + 1 : 0)); } catch (e) {}
   });
-  refresh();
+}
+
+// ---- tombol ----
+win.bMode.on('click', function () {
+  st.mode = (st.mode === 'kick') ? 'bank' : 'kick';
+  win.bMode.text(st.mode === 'kick' ? 'KICK' : 'BANK');
+  solveAll();
+});
+win.bRails.on('click', function () {
+  st.maxRails = (st.maxRails >= 5) ? 1 : st.maxRails + 1;
+  win.bRails.text('rails ' + st.maxRails);
+  solveAll();
+});
+win.bShoot.on('click', function () { shootSelected(); });
+win.bExit.on('click', function () { win.close(); engines.stopAll(); });
+
+// ---- pilih solusi ----
+win.lv.on('item_click', function (item, position) {
+  st.sel = position;
+  pushItems();
 });
 
-// ---- drag bola di panel tabel ----
+// ---- canvas: gambar + drag ----
+win.cv.setMaxFps(15);
+win.cv.on('draw', function (canvas, view) { renderFrame(canvas); });
+
 var dragK = null;
-ui.run(function () {
-  drawTable();
-  var cvx = tableWin.cv;
-  cvx.on('touch_down', function (e) {
-    var px = e.getX(), py = e.getY(), best = null, bd = 1e9;
-    var ks = ['C', 'O', 'P', 'X', 'A'];
-    for (var i = 0; i < ks.length; i++) {
-      var d = Math.hypot(sx(st[ks[i]][0]) - px, sy(st[ks[i]][1]) - py);
-      if (d < bd) { bd = d; best = ks[i]; }
-    }
-    dragK = bd <= 26 ? best : null;
-  });
-  cvx.on('touch_move', function (e) {
-    if (!dragK) return;
-    st[dragK] = clampP(e.getX(), e.getY());
-    refresh();
-  });
-  cvx.on('touch_up', function () {
-    if (dragK) { dragK = null; solveAll(); }
-  });
+win.cv.on('touch_down', function (e) {
+  var px = evX(e), py = evY(e), ks = ['C', 'O', 'P', 'X', 'A'], best = null, bd = 1e9, i, d;
+  for (i = 0; i < ks.length; i++) {
+    d = Math.hypot(sx(st[ks[i]][0]) - px, sy(st[ks[i]][1]) - py);
+    if (d < bd) { bd = d; best = ks[i]; }
+  }
+  dragK = (bd <= dp(26)) ? best : null;
+});
+win.cv.on('touch_move', function (e) {
+  if (!dragK) return;
+  st[dragK] = clampP(evX(e), evY(e));
+});
+win.cv.on('touch_up', function () {
+  if (!dragK) return;
+  dragK = null;
+  solveAll();
 });
 
-bMode.setText('mode: KICK');
+// ---- init ----
+if (!auto.service) { toast('Aksesibilitas belum aktif — drag & solver jalan, SHOOT belum'); }
 solveAll();
-toast('8bp overlay aktif (v3) — tarik 3 bola, tap solusi, SHOOT');
+toast('8bp overlay aktif (v4) — tarik C/O/P/X/A, tap solusi, SHOOT');
+setInterval(function () {}, 1000);   // tahan window tetap hidup
