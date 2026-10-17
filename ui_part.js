@@ -54,7 +54,7 @@ function renderFrame(canvas) {
     for (var i = 0; i < pp.length; i++) {
       var rad = Math.max(dp(4), scl * 0.07);
       canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, paint);
-      if (Math.abs(pp[i][0] - st.P[0]) < 1e-9 && Math.abs(pp[i][1] - st.P[1]) < 1e-9) {
+      if (Math.hypot(pp[i][0] - st.P[0], pp[i][1] - st.P[1]) < 0.07) {
         paint.setStyle(android.graphics.Paint.Style.STROKE);
         paint.setStrokeWidth(dp(2));
         paint.setColor(colors.parseColor('#3FB950'));

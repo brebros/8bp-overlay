@@ -17,7 +17,7 @@ requestScreenCapture(false);
 var TW = 2.24, TH = 1.12;               // 9-ft table (m)
 var st = {
   mode: 'kick', maxRails: 3,
-  C: [0.4, 0.9], O: [1.5, 0.5], P: [2.24, 0.0],
+  C: [0.4, 0.9], O: [1.5, 0.5], P: [1.12, 1.12],
   X: [1.12, 0.56],                       // hub: 6 garis dari 6 lubang nembak ke sini
   A: [1.68, 0.20],                       // handle bidik: garis pantul V (kick/bank)
   sols: [], sel: 0
@@ -42,7 +42,8 @@ function ux(px) { return Math.min(TW, Math.max(0, (px - oX) / scl)); }
 function uy(py) { return Math.min(TH, Math.max(0, TH - (py - oY) / scl)); }
 function ballRad() { return ballPx; }
 function pocketList() {
-  return [[0, 0], [TW, 0], [0, TH], [TW, TH], [0, TH / 2], [TW, TH / 2]];
+  // 4 sudut + 2 tengah di rail PANJANG (sisi horizontal)
+  return [[0, 0], [TW, 0], [0, TH], [TW, TH], [TW / 2, 0], [TW / 2, TH]];
 }
 function dist(a, b) { return Math.hypot(b[0] - a[0], b[1] - a[1]); }
 function clampP(x, y) { return [ux(x), uy(y)]; }
@@ -283,7 +284,7 @@ function renderFrame(canvas) {
     for (var i = 0; i < pp.length; i++) {
       var rad = Math.max(dp(4), scl * 0.07);
       canvas.drawCircle(sx(pp[i][0]), sy(pp[i][1]), rad, paint);
-      if (Math.abs(pp[i][0] - st.P[0]) < 1e-9 && Math.abs(pp[i][1] - st.P[1]) < 1e-9) {
+      if (Math.hypot(pp[i][0] - st.P[0], pp[i][1] - st.P[1]) < 0.07) {
         paint.setStyle(android.graphics.Paint.Style.STROKE);
         paint.setStrokeWidth(dp(2));
         paint.setColor(colors.parseColor('#3FB950'));
